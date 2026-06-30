@@ -62,7 +62,7 @@ triggers:
 | 平台 | GitHub 仓库 | 来源 |
 |------|-----------|------|
 | Aqara | `https://github.com/aqara/aqara-agent-skills` | **Aqara 官方** |
-| 米家 | `https://github.com/xahao512/xiaomi-home-agent` | 社区（xahao512） |
+| 米家 | `https://github.com/anduloo/xiaomi-home-agent` | 社区（xahao512） |
 
 - 安装完成后重新运行 `smart_home.py check` 确认就绪
 

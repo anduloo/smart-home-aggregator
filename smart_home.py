@@ -135,7 +135,7 @@ def _format_dependency_prompt(dep: dict) -> str:
         "  ① 通过 WorkBuddy 技能市场搜索安装",
         "  ② 市场搜不到时，用 GitHub 仓库兜底：",
         "     Aqara:  https://github.com/aqara/aqara-agent-skills （Aqara 官方）",
-        "     米家:   https://github.com/xahao512/xiaomi-home-agent",
+        "     米家:   https://github.com/anduloo/xiaomi-home-agent",
         "=" * 56,
     ]
     return "\n".join(lines)
