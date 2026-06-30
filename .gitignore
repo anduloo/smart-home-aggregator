@@ -1,0 +1,15 @@
+# Device cache — contains personal device data
+config/devices_cache.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
