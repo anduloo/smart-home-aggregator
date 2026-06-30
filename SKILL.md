@@ -1,6 +1,6 @@
 ---
 name: Smart Home Aggregator
-version: 1.2.1
+version: 1.2.2
 description: Unified smart home aggregation across Xiaomi Mijia and Aqara platforms.
 triggers:
   - 查看所有设备
@@ -148,6 +148,7 @@ triggers:
 | 米家 API 抛认证异常 | Token 过期（约 30 天），需重新扫码登录（见规则 4） |
 | 米家 QR 码登录超时 | 在 5 分钟内完成扫码；过期后重新生成 QR 码 |
 | `mijiaAPI -l` 报错/无响应 | 这是交互命令，WorkBuddy 沙箱不支持；改用规则 4 的 Python 非交互方式 |
+| 米家传感器查不到属性数据 | **PIID 盲区**：BLE/人体存在传感器属性 ID 在 1000+（如 Linptect ES3 的 occupancy-status=piid 1078），`get_status()` 已覆盖标准 + BLE 双范围，详见 xiaomi-home-agent SKILL.md § BLE/传感器 PIID 范围 |
 | Aqara 返回 0 设备 | 检查 `assets/user_account.json` 的 API Key 和 home_id |
 | Aqara 输出乱码 | 使用文件重定向方式（见规则 3） |
 | 控制失败 | 先 `status` 确认设备在线，再检查控制参数 |

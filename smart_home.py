@@ -195,8 +195,47 @@ class XiaomiAdapter:
         except Exception as e:
             return {"platform": "米家", "ok": False, "error": str(e), "devices": []}
 
-    def get_status(self, did: str) -> dict:
-        """查询单个设备属性状态"""
+    # MIoT spec 常见属性映射（自动发现时需要参考）
+    # 标准设备 (switch/light/curtain): siid=2, piid=1-4
+    # 环境传感器: siid=3, piid=1-10 (温度/湿度/PM2.5/CO2等)
+    # BLE/人体存在传感器: siid=2, piid=1078-1080; siid=4, piid=1003
+    _STATUS_PROPS_BASIC = [
+        # ── 标准设备 (siid=2) ──
+        {"siid": 2, "piid": 1},   # 开关 (on/off)
+        {"siid": 2, "piid": 2},   # 位置/亮度/百分比
+        {"siid": 2, "piid": 3},   # 目标位置/温度
+        {"siid": 2, "piid": 4},   # 方向/模式
+        {"siid": 2, "piid": 5},   # 风速/档位
+        {"siid": 2, "piid": 6},   # 摆风/辅助
+        # ── 人体存在传感器 (siid=2, piid 1078+) ──
+        {"siid": 2, "piid": 1078},  # occupancy-status 有人/无人
+        {"siid": 2, "piid": 1079},  # no-one-duration 无人持续时间
+        {"siid": 2, "piid": 1080},  # has-someone-duration 有人持续时间
+        {"siid": 2, "piid": 5},   # 光照度 (部分传感器用 piid=1005 但也在 siid=2)
+        # ── 环境传感器 (siid=3) ──
+        {"siid": 3, "piid": 1},   # 温度
+        {"siid": 3, "piid": 2},   # 湿度
+        {"siid": 3, "piid": 3},   # PM2.5
+        {"siid": 3, "piid": 4},   # CO2
+        {"siid": 3, "piid": 5},   # TVOC
+        {"siid": 3, "piid": 6},   # 甲醛
+        # ── 电池 (siid=4, piid 1000+) ──
+        {"siid": 4, "piid": 1},   # 电量 (标准)
+        {"siid": 4, "piid": 1003},  # 电量 (BLE设备)
+    ]
+
+    # 常见属性的中文名映射
+    _PROP_NAME_MAP = {
+        (2, 1): "开关", (2, 2): "位置/亮度", (2, 3): "目标/温度",
+        (2, 4): "模式", (2, 5): "风速", (2, 6): "摆风",
+        (2, 1005): "光照度(lux)", (2, 1078): "有人状态", (2, 1079): "无人持续(秒)", (2, 1080): "有人持续(秒)",
+        (3, 1): "温度", (3, 2): "湿度", (3, 3): "PM2.5",
+        (3, 4): "CO2", (3, 5): "TVOC", (3, 6): "甲醛",
+        (4, 1): "电量", (4, 1003): "电量",
+    }
+
+    def get_status(self, did: str, model: str = "") -> dict:
+        """查询单个设备属性状态，自动覆盖标准/传感器/BLE 三种 PIID 范围"""
         if not self.available:
             return {"ok": False, "error": "未登录"}
 
@@ -204,19 +243,34 @@ class XiaomiAdapter:
             from mijiaAPI import mijiaAPI
 
             api = mijiaAPI(auth_data_path=str(self.auth))
-            # 尝试常见 siid/piid 组合
-            props = [
-                {"did": did, "siid": 2, "piid": 1},  # 开关
-                {"did": did, "siid": 2, "piid": 2},  # 位置/亮度
-                {"did": did, "siid": 2, "piid": 3},  # 目标位置/温度
-                {"did": did, "siid": 2, "piid": 4},  # 方向
-            ]
+
+            # 构建查询：每种 PIID 组合带 did
+            props = []
+            for p in self._STATUS_PROPS_BASIC:
+                props.append({"did": did, "siid": p["siid"], "piid": p["piid"]})
+
+            # 如果是传感器类设备，额外扫描传感器专属高 PIID 范围
+            # (linp.sensor_occupy 的 SIID=2 PIID 可能还有更多)
+            is_sensor = any(kw in model.lower() for kw in
+                            ["sensor", "occupy", "motion", "presence", "detector",
+                             "weather", "monitor", "air", "temp", "sensor_occupy"])
+            if is_sensor:
+                for piid in range(1005, 1086, 5):  # 步进 5 扫描传感器扩展属性
+                    props.append({"did": did, "siid": 2, "piid": piid})
+
             result = api.get_devices_prop(props)
             status = {}
+            prop_details = []
             for r in result:
                 if r.get("code") == 0:
-                    status[f"siid{r.get('siid')}_piid{r.get('piid')}"] = r.get("value")
-            return {"ok": True, "status": status}
+                    siid = r.get("siid")
+                    piid = r.get("piid")
+                    val = r.get("value")
+                    key = f"siid{siid}_piid{piid}"
+                    status[key] = val
+                    label = self._PROP_NAME_MAP.get((siid, piid), f"siid{siid}.piid{piid}")
+                    prop_details.append({"label": label, "siid": siid, "piid": piid, "value": val})
+            return {"ok": True, "status": status, "props": prop_details}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -743,12 +797,13 @@ def main():
         did = target["did"]
         print(f"🔍 查询 [{plat}] {target['name']} (did={did})")
 
+        model = target.get("model", "")
         if plat == "米家":
             adapter = XiaomiAdapter()
+            status = adapter.get_status(did, model=model)
         else:
             adapter = AqaraAdapter()
-
-        status = adapter.get_status(did)
+            status = adapter.get_status(did)
         print(json.dumps(status, ensure_ascii=False, indent=2))
 
     elif args.command == "control":
